@@ -63,8 +63,8 @@
 #define AICMODE_TDM			AICMODE_DSP
 #define AIC_TDM_OFFSET	1			// Teensy Audio: invert BCLK, offset slots by 1 BCLK
 #define AIC_FIRST_SLOT	0 		// shift first CODEC for testing later slots
-#define AIC_TDM_CLOCKS	256		// 16 x 16-bit slots
-#define AIC_TM_SLOT_SHIFT 5 	// (2 x 16 = 32 bits for 2 channels)
+//#define AIC_TDM_CLOCKS	256		// 16 x 16-bit slots
+//#define AIC_TM_SLOT_SHIFT 5 	// (2 x 16 = 32 bits for 2 channels)
 
 #define AICWORD_16			0x0
 #define AICWORD_20			0x1
@@ -125,7 +125,7 @@ struct aic_pll {
 class AudioControlTLV320AIC3104  : public AudioControl
 {
 public:
-	AudioControlTLV320AIC3104(uint8_t codecs = 1, bool useMCLK = true, uint8_t i2sMode = AICMODE_I2S,  long sampleRate = 44100, int sampleLength = 16); // default: standard Teensy Audio I2S, one CODEC
+	AudioControlTLV320AIC3104(uint8_t codecs = 1, bool useMCLK = true, uint8_t i2sMode = AICMODE_I2S,  long sampleRate = DEFAULT_SAMPLERATE, int sampleLength = DEFAULT_SAMPLE_LENGTH); // default: standard Teensy Audio I2S, one CODEC
 	~AudioControlTLV320AIC3104();	
 
 	// BOARD controls
@@ -143,7 +143,7 @@ public:
 	void listMuxes();
 	
 	// PLL 
-	unsigned long setPllClkIn(long sampRate = 44100); // potted Pll values - values will usually work if PLL is required (!useMCLK)
+	unsigned long setPllClkIn(long sampRate = DEFAULT_SAMPLERATE); // potted Pll values - values will usually work if PLL is required (!useMCLK)
 	int setPll(uint32_t clk, uint32_t p, uint32_t r, uint32_t j,uint32_t d);
 	aic_pll getPll(); // set specific variables, but do not update codec.
 	unsigned long getPllFsRef(); // return calculated fsRef for assigned pll values	
@@ -239,10 +239,10 @@ private:
 	inputModes _inputMode = AIC_DIFF;	
 	uint8_t _gainStep	= 0;	// 0dB gain default
 	uint8_t _i2sMode = AICMODE_I2S;
-	uint32_t _sampleRate = 44100;	
-	uint32_t _baseRate = 44100;
+	uint32_t _sampleRate = DEFAULT_SAMPLERATE;
+	uint32_t _baseRate = DEFAULT_SAMPLERATE;
 	bool _dualRate = false; // true is untested
-	int _sampleLength = 16;			// only 16 bits tested
+	int _sampleLength = DEFAULT_SAMPLE_LENGTH;
 	bool _usingMCLK = true;
 	dacPwr _dacPower = DAC_DEF;	
 	uint8_t _hpfDefault = AIC_HPF_DISABLE; // disabled

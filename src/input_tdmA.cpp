@@ -31,8 +31,11 @@
 #if defined(KINETISK) || defined(__IMXRT1062__)
 #include "utility/imxrt_hw.h"
 
+// DMA buffer for AUDIO_BLOCK_SAMPLES frames à 256 bits, times two for alternate transfer
+// this is transferred by DMA in 32 bit chunks
 DMAMEM __attribute__((aligned(32)))
-static uint32_t tdm_rx_buffer[AUDIO_BLOCK_SAMPLES*16];
+static uint8_t tdm_rx_buffer[AUDIO_BLOCK_SAMPLES*(256/sizeof(uint8_t))*2];
+
 audio_block_t * AudioInputTDM_A::block_incoming[16] = {
 	nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
 	nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr
@@ -47,7 +50,16 @@ void AudioInputTDM_A::begin(int sampleLength)
 	dma.begin(true); // Allocate the DMA channel first
 
 	// TODO: should we set & clear the I2S_RCSR_SR bit here?
+
+	// Audio clocks are programmed, according to AUDIO_SAMPLE_RATE_EXACT constant
+	// TODO: 96 kHz case might not be correctly covered yet
 	AudioOutputTDM_A::config_tdm();
+
+	// DMA always transfers 256 bits per frame (16 x 16 bits = half tdm_rx_buffer)
+	// The transfer alternates between the first and the second half of the tdm_rx_buffer.
+	// this is as received from the bit block, independent of the actual audio format
+	// Must be correctly interpreted in the isr callback
+
 #if defined(KINETISK)
 	CORE_PIN13_CONFIG = PORT_PCR_MUX(4); // pin 13, PTC5, I2S0_RXD0
 	dma.TCD->SADDR = &I2S0_RDR0;
@@ -88,75 +100,98 @@ void AudioInputTDM_A::begin(int sampleLength)
 
 	I2S1_RCSR = I2S_RCSR_RE | I2S_RCSR_BCE | I2S_RCSR_FRDE | I2S_RCSR_FR;
 	dma.attachInterrupt(isr);	
-#endif	
-}
+#endif
 
-// TODO: needs optimization...
-// 8 x 32-bit samples
-static void memcpy_tdm_rx(uint32_t *dest1, uint32_t *dest2, const uint32_t *src)
-{
-	uint32_t i, in1, in2;
-	for (i=0; i < AUDIO_BLOCK_SAMPLES/2; i++) {
-		in1 = *src;
-		in2 = *(src+8);
-		src += 16;
-		*dest1++ = (in1 >> 16) | (in2 & 0xFFFF0000);
-		//*dest2++ = (in1 << 16) | (in2 & 0x0000FFFF);		
-		*dest2++ = (in1 & 0x0000FFFF)  | (in2 << 16);		// Fixed RP
-	}
+//	printf("DMA size: %d\n", sizeof(tdm_rx_buffer));
 }
 
 
-// transfer all 16-bit samples for two channels from this 32-bit DMA block (half of 16 x AUDIO_BLOCK_SAMPLES) RP
-static void memcpy_tdm_rx_16(uint16_t *dest1, uint16_t *dest2, const uint32_t *src)
+template<int bits, int channels, int frames=AUDIO_BLOCK_SAMPLES>
+static void transfer(const uint8_t *dma_src, audio_block_t **block_dst)
 {
-	uint32_t i, in1;
-	for (i=0; i < AUDIO_BLOCK_SAMPLES; i++) { // 2 samples per word
-		in1 = *src;
-		*dest1++ = (uint16_t)((in1 >> 16) & 0x0000FFFF);
-		*dest2++ = (uint16_t)(in1 & 0x0000FFFF);
-		src += 8; // 2 samples per word
+	// hop size in bytes from channel to channel
+	const int sample_bytes = bits / sizeof(*dma_src);
+	// hop size in bytes from frame to frame (frame size is fixed to 256 bits)
+	const int frame_bytes = 256 / sizeof(*dma_src);
+
+	if(bits == 16) {
+		for(int i = 0; i < channels; ++i, dma_src += sample_bytes) {
+			int16_t *dest = block_dst[i]->data;
+			const uint8_t *inp = dma_src;
+			for(int f = 0; f < frames; ++f, inp += frame_bytes)
+				dest[f] = *(const int16_t *)inp;
+		}
 	}
+	else if(bits == 24 || bits == 32) {
+		// we pass incoming 24/32-bit data to hi/lo pairs of 16-bit output
+		for(int i = 0; i < channels; ++i, dma_src += sample_bytes) {
+			int16_t *desthi = block_dst[i*2]->data;
+			int16_t *destlo = block_dst[i*2+1]->data;
+			const uint8_t *inp = dma_src;
+			for(int f = 0; f < frames; ++f, inp += frame_bytes) {
+				// MSB is first
+				desthi[f] = *(const int16_t *)inp;
+				if(bits == 32)
+					destlo[f] = *(const int16_t *)(inp+2);
+				else
+					// 24 bit data is promoted to 32 bits
+					destlo[f] = (int16_t)(*(const uint8_t *)(inp+2))<<8;
+			}
+		}
+	}
+	else {
+		// we don't cover 20 bits
+	}
+}
+
+static void zeroout(int16_t *dst, int samples)
+{
+	for(int i = 0; i < samples; ++i) dst[i] = 0;
 }
 
 void AudioInputTDM_A::isr(void)
 {
-	uint32_t daddr;
-	const uint32_t *src;
-	unsigned int i;
+	uint32_t daddr = (uint32_t)(dma.TCD->DADDR);
 
-	daddr = (uint32_t)(dma.TCD->DADDR);
 	dma.clearInterrupt();
 
-	if (daddr < (uint32_t)tdm_rx_buffer + sizeof(tdm_rx_buffer) / 2) {
+	const uint8_t *src;
+	if (daddr < (uint32_t)tdm_rx_buffer + sizeof(tdm_rx_buffer)/2) {
 		// DMA is receiving to the first half of the buffer
 		// need to remove data from the second half
-		src = &tdm_rx_buffer[AUDIO_BLOCK_SAMPLES*8];
+		src = tdm_rx_buffer+sizeof(tdm_rx_buffer)/2;
 	} else {
 		// DMA is receiving to the second half of the buffer
 		// need to remove data from the first half
-		src = &tdm_rx_buffer[0];
+		src = tdm_rx_buffer;
 	}
+
 	if (block_incoming[0] != nullptr) {
 		#if IMXRT_CACHE_ENABLED >=1
-		arm_dcache_delete((void*)src, sizeof(tdm_rx_buffer) / 2);
+		arm_dcache_delete((void*)src, sizeof(tdm_rx_buffer)/2);
 		#endif
-	if(_sampleLengthI == 16)
-		
-		for (i=0; i < 16; i += 2) { // channel pairs RP
-			uint16_t *dest1 = (uint16_t *)block_incoming[i]->data;
-			uint16_t *dest2 = (uint16_t *)block_incoming[i+1]->data;
-			memcpy_tdm_rx_16(dest1, dest2, src);
-			src++;
-		}
-	else
-		for (i=0; i < 16; i += 2) { // channel pairs
-			uint32_t *dest1 = (uint32_t *)(block_incoming[i]->data);
-			uint32_t *dest2 = (uint32_t *)(block_incoming[i+1]->data);
-			memcpy_tdm_rx(dest1, dest2, src);
-			src++;
-		}
 	}
+
+	// by DMA, we receive AUDIO_BLOCK_SAMPLES frames à 256 bits
+	if(_sampleLengthI == 16) {
+		// we receive AUDIO_BLOCK_SAMPLES x 16 channels x 16 bits
+//		transfer<16,16>(src, block_incoming);
+		for(int i = 0; i < 16; ++i)
+			zeroout(block_incoming[i]->data, AUDIO_BLOCK_SAMPLES);
+//			memset(block_incoming[i]->data, 0, sizeof(block_incoming[i]->data));
+	}
+	else if(_sampleLengthI == 32) {
+		transfer<32,8>(src, block_incoming);
+	}
+	else if(_sampleLengthI == 24) {
+		// We receive 10 channels per DMA, but deliver only 8 x 16-bit output pairs
+		transfer<24,8>(src, block_incoming);
+	}
+	else { // 20 bit case not covered
+		for(int i = 0; i < 16; ++i)
+			zeroout(block_incoming[i]->data, AUDIO_BLOCK_SAMPLES);
+	}
+
 	if (update_responsibility) update_all();
 }
 

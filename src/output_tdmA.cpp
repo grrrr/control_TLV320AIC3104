@@ -291,8 +291,11 @@ void AudioOutputTDM_A::config_tdm() // argument ignored for now
 	// if either transmitter or receiver is enabled, do nothing
 	if (I2S1_TCSR & I2S_TCSR_TE) return;
 	if (I2S1_RCSR & I2S_RCSR_RE) return;
+
 //PLL:
 	int fs = AUDIO_SAMPLE_RATE_EXACT;
+	// TODO: 96 kHz might be a special case
+
 	// PLL between 27*24 = 648MHz und 54*24=1296MHz
 	int n1 = 4; //SAI prescaler 4 => (n1*n2) = multiple of 4
 	int n2 = 1 + (24000000 * 27) / (fs * 256 * n1);

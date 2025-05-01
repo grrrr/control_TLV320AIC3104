@@ -18,9 +18,11 @@ AudioControlTLV320AIC3104::AudioControlTLV320AIC3104(uint8_t codecs, bool useMCL
 	_codec_I2C_address = AIC3104_I2C_ADDRESS;	
 	_sampleLength = sampleLength;
 	_usingMCLK = useMCLK;
-	_i2sMode = i2sMode;
 	if(codecs > 1)
-		_i2sMode = AICMODE_TDM; // I2S only for one codec
+		_i2sMode = AICMODE_TDM;
+	else
+		// I2S only for one codec
+		_i2sMode = i2sMode;
 	_sampleRate = sampleRate;
 	_dualRate = (_sampleRate > 48000);
 	_baseRate = (_sampleRate % 8000 == 0) ? 48000 : 44100;
@@ -176,23 +178,46 @@ void AudioControlTLV320AIC3104::writeR7(uint8_t codec)
 }
 
 // I2s/TDM mode and format
-// Only 16-bit implemented
 // re-sync not set
 void AudioControlTLV320AIC3104::writeR9(uint8_t codec)		// p51
 {
-		uint8_t val = _sampleLength << 4;
-		if(_i2sMode == AICMODE_DSP)  // probably unnecessary - only master mode? 
-			val += 0x08;	// 256-clock mode
-		val += _i2sMode << 6;		
-		if (_reSync) 
-				val += 0x07; // ADC & DAC
+		uint8_t val = 0;
+
+		// set Audio Serial Data Word Length Control
+		switch(_sampleLength) {
+			case 16: val += AICWORD_16; break;
+			case 20: val += AICWORD_20; break;
+			case 24: val += AICWORD_24; break;
+			case 32: val += AICWORD_32; break;
+		}
+
+		if(_i2sMode == AICMODE_DSP) {
+			/* Note: for DSP aka TDM mode, we enable 256-clock transfer mode
+				- in 16-bit mode, we can fit 16 channels / 8 codecs
+				- in 20-bit mode, we can fit 12 channels / 6 codecs
+				- in 24-bit mode, we can fit 10 channels / 5 codecs
+				- in 32-bit mode, we can fit 8 channels / 4 codecs
+			*/
+			// set Bit Clock Rate Control to 256-clock mode
+			val += 1<<3;
+		}
+
+		// set Audio Serial Data Interface Transfer Mode
+		val += _i2sMode << 6;
+
+		if(_reSync)
+			// set DAC Re-Sync / ADC Re-Sync / Re-Sync Mute Behavior
+			val += 0x07;
+
 		writeRegister(9, val, codec);
 }
 
 // TDM slot offset
 void AudioControlTLV320AIC3104::writeR10(uint8_t codec)	// p51
 {
-		uint8_t val = (codec * 2 * _sampleLength) + AIC_FIRST_SLOT; // TDM offset in sample length slots, 2 per codec
+		// set TDM offset in sample length slots, 2 channels per codec
+		// Note: we have to fit in the 256 slot range
+		uint8_t val = (codec * 2 * _sampleLength) + AIC_FIRST_SLOT;
 		if(_i2sMode == AICMODE_TDM)
 			val += AIC_TDM_OFFSET;
 		writeRegister(10, val, codec);

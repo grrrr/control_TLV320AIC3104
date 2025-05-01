@@ -86,7 +86,7 @@ int AudioControlTLV320AIC3104::setPll(uint32_t clk, uint32_t p, uint32_t r, uint
 // Call after setPll()
 void AudioControlTLV320AIC3104::enablePll(bool enabled, int codec)
 {
-	uint8_t r3 = (enabled) ? 0x80 : 0 | pll.q << 3 | pll.p;
+	uint8_t r3 = (enabled ? 0x80 : 0) | (pll.q << 3) | pll.p;
 	uint8_t r102 = (enabled)? 0x22: 0x02; // p75 - BCLK for PLLCLK_IN, MCLK for CLKDIV_IN 
 	for(int i = 0; i < _codecs; i++)
 	{
