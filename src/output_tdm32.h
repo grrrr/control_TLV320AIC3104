@@ -37,6 +37,7 @@
 // #define SAMPLE_LENGTH	32 
 // #define CHANNELS 8
 #define TDM_CHANNELS 8
+#pragma message "Including AudioOutputTDM_32"
 class AudioOutputTDM_32 : public AudioStream_F32
 {
 public: // 8 blocks of 32 bits

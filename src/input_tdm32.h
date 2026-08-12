@@ -37,6 +37,7 @@
 
 #define TDM_CHANNELS 8
 #define I32_TO_F32_NORM_FACTOR (4.656612875245797e-10)   //which is 1/(2^31 - 1)
+#pragma message "Including AudioInputTDM_32"
 class AudioInputTDM_32 : public AudioStream_F32
 {
 public:
