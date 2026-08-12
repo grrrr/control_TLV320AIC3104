@@ -31,13 +31,13 @@
 #define _input_tdm32_h_
 
 #include <Arduino.h>  
-#if 1 //defined(__has_include) && __has_include(<Audiostream_F32.h>) 
+#if defined(__has_include)
+#if __has_include("Audiostream_F32.h") 
 #include "AudioStream_F32.h"
 #include <DMAChannel.h> 
 
 #define TDM_CHANNELS 8
 #define I32_TO_F32_NORM_FACTOR (4.656612875245797e-10)   //which is 1/(2^31 - 1)
-#pragma message "Including AudioInputTDM_32"
 class AudioInputTDM_32 : public AudioStream_F32
 {
 public:
@@ -57,5 +57,7 @@ protected:
 private:
 	static audio_block_f32_t *block_incoming[8];
 };
-#endif // F32 library available
+
+#endif // __has_include("Audiostream_F32.h") 
+#endif // defined(__has_include)
 #endif
