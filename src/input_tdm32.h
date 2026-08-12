@@ -31,7 +31,7 @@
 #define _input_tdm32_h_
 
 #include <Arduino.h>  
-#if defined(__has_include) && __has_include(<Audiostream_F32.h>) 
+#if 1 //defined(__has_include) && __has_include(<Audiostream_F32.h>) 
 #include "AudioStream_F32.h"
 #include <DMAChannel.h> 
 
