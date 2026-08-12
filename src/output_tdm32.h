@@ -31,7 +31,7 @@
 
 #include <Arduino.h>    
 #if defined(__has_include)
-if __has_include("Audiostream_F32.h") 
+#if __has_include("Audiostream_F32.h") 
 #include "AudioStream_F32.h"
 #include <DMAChannel.h> 
 
