@@ -31,9 +31,7 @@
 #define _input_tdm32_h_
 
 #include <Arduino.h>  
-#if defined(__has_include)
-#if 1 //__has_include("Audiostream_F32.h") 
-#include "AudioStream_F32.h"
+#include <AudioStream_F32.h>
 #include <DMAChannel.h> 
 
 #define TDM_CHANNELS 8
@@ -58,6 +56,4 @@ private:
 	static audio_block_f32_t *block_incoming[8];
 };
 
-#endif // __has_include("Audiostream_F32.h") 
-#endif // defined(__has_include)
 #endif

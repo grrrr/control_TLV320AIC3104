@@ -30,9 +30,7 @@
 #define output_tdm32_h_
 
 #include <Arduino.h>    
-#if defined(__has_include)
-#if 1 //__has_include("Audiostream_F32.h") 
-#include "AudioStream_F32.h"
+#include <AudioStream_F32.h>
 #include <DMAChannel.h> 
 
 #define F32_TO_I32_NORM_FACTOR (2147483647)   //which is 2^31-1
@@ -65,6 +63,4 @@ private:
 	audio_block_f32_t *inputQueueArray[8];
 };
 
-#endif // __has_include("Audiostream_F32.h") 
-#endif // defined(__has_include)
 #endif
